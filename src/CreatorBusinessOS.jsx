@@ -663,7 +663,7 @@ export default function CreatorBusinessOS() {
       if (!anthropic) { setError("ANTHROPIC_API_KEY is missing from your .env file."); return; }
       if (videoOn && !luma) { setError("LUMA_API_KEY is missing from your .env file."); return; }
     } catch {
-      setError("API server is not running. Start both servers with: npm run dev");
+      setError("Cannot reach API server. Make sure you're on port 3001 (npm run dev) not 5173.");
       return;
     }
 
