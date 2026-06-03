@@ -775,7 +775,7 @@ ${videoField}`;
           ...p,
           platform: p.platform || platforms[i % platforms.length],
           videoUrl: null,
-          imageUrl: `https://source.unsplash.com/800x600/?${encodeURIComponent(p.unsplashQuery || "business")}`,
+          imageUrl: `https://loremflickr.com/800/500/${encodeURIComponent((p.unsplashQuery || "business").replace(/\s+/g, ","))}?lock=${i}`,
           hasVideo: false,
           id: i,
         })));
@@ -1070,6 +1070,7 @@ Topics or themes to emphasize.`}
                       src={cur.imageUrl}
                       alt=""
                       onLoad={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                      onError={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
                       draggable={false}
                     />
                   )}
