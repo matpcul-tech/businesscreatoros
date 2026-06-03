@@ -9,6 +9,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+    luma: !!process.env.LUMA_API_KEY,
+  });
+});
+
 app.post("/api/generate", async (req, res) => {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {

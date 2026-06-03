@@ -654,6 +654,19 @@ export default function CreatorBusinessOS() {
   const generate = async () => {
     if (!url.trim() || platforms.length === 0) return;
     setError("");
+
+    // Verify the API server is reachable before switching screens
+    try {
+      const health = await fetch("/api/health");
+      if (!health.ok) throw new Error();
+      const { anthropic, luma } = await health.json();
+      if (!anthropic) { setError("ANTHROPIC_API_KEY is missing from your .env file."); return; }
+      if (videoOn && !luma) { setError("LUMA_API_KEY is missing from your .env file."); return; }
+    } catch {
+      setError("API server is not running. Start both servers with: npm run dev");
+      return;
+    }
+
     setScreen("loading");
     setProgress(0);
 
