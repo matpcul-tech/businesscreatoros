@@ -51,12 +51,10 @@ const extractJSON = (text) => {
   throw new Error("Could not parse AI response. Please try again.");
 };
 
-const pollLuma = async (generationId, lumaKey, maxAttempts = 30) => {
+const pollLuma = async (generationId, maxAttempts = 30) => {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(r => setTimeout(r, 4000));
-    const res = await fetch(`https://api.lumalabs.ai/dream-machine/v1/generations/${generationId}`, {
-      headers: { Authorization: `Bearer ${lumaKey}`, "Content-Type": "application/json" },
-    });
+    const res = await fetch(`/api/luma/poll/${generationId}`);
     if (!res.ok) throw new Error("Luma polling error");
     const data = await res.json();
     if (data.state === "completed" && data.assets?.video) return data.assets.video;
@@ -65,10 +63,10 @@ const pollLuma = async (generationId, lumaKey, maxAttempts = 30) => {
   throw new Error("Video generation timed out");
 };
 
-const generateLumaVideo = async (prompt, lumaKey) => {
-  const res = await fetch("https://api.lumalabs.ai/dream-machine/v1/generations", {
+const generateLumaVideo = async (prompt) => {
+  const res = await fetch("/api/luma/generate", {
     method: "POST",
-    headers: { Authorization: `Bearer ${lumaKey}`, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt, aspect_ratio: "9:16", loop: false }),
   });
   if (!res.ok) {
@@ -639,8 +637,6 @@ export default function CreatorBusinessOS() {
   const [copiedId, setCopiedId] = useState(null);
   const [mediaLoaded, setMediaLoaded] = useState({});
   const [videoOn, setVideoOn] = useState(false);
-  const [lumaKey, setLumaKey] = useState("");
-  const [lumaOpen, setLumaOpen] = useState(false);
 
   const cardRef = useRef(null);
   const dragStart = useRef(null);
@@ -651,17 +647,12 @@ export default function CreatorBusinessOS() {
     prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
   );
 
-  const handleVideoToggle = () => {
-    const next = !videoOn;
-    setVideoOn(next);
-    setLumaOpen(next);
-  };
+  const handleVideoToggle = () => setVideoOn(v => !v);
 
   const postCount = (n) => `${n} post${n !== 1 ? "s" : ""}`;
 
   const generate = async () => {
     if (!url.trim() || platforms.length === 0) return;
-    if (videoOn && !lumaKey.trim()) { setError("Enter your Luma API key to enable video generation."); return; }
     setError("");
     setScreen("loading");
     setProgress(0);
@@ -742,7 +733,7 @@ ${videoField}`;
 
       setProgress(30);
 
-      if (videoOn && lumaKey.trim()) {
+      if (videoOn) {
         setStage("Generating videos...");
         setDetail("Submitting to Luma AI");
         setProgress(40);
@@ -752,7 +743,7 @@ ${videoField}`;
           const vp = parsed[i].videoPrompt || "cinematic business scene, elegant motion, golden hour";
           try {
             setDetail(`Submitting video ${i + 1} of ${parsed.length}`);
-            const gid = await generateLumaVideo(vp, lumaKey.trim());
+            const gid = await generateLumaVideo(vp);
             genIds.push({ i, gid });
           } catch { genIds.push({ i, gid: null }); }
           setProgress(40 + ((i + 1) / parsed.length) * 20);
@@ -765,7 +756,7 @@ ${videoField}`;
         await Promise.all(genIds.filter(g => g.gid).map(async ({ i, gid }) => {
           try {
             setDetail(`Rendering video ${i + 1}...`);
-            videoUrls[i] = await pollLuma(gid, lumaKey.trim());
+            videoUrls[i] = await pollLuma(gid);
             setProgress(p => Math.min(p + (40 / genIds.length), 90));
           } catch { videoUrls[i] = null; }
         }));
@@ -950,26 +941,9 @@ ${videoField}`;
                   <div className={`feature-icon ${videoOn ? "active" : ""}`}>🎬</div>
                   <div className="feature-text">
                     <div className="feature-title">AI Video Generation</div>
-                    <div className="feature-sub">Luma Dream Machine -- 5-sec cinematic clip per post (~$0.40 each)</div>
+                    <div className="feature-sub">Luma Dream Machine -- 5-sec cinematic clip per post (~$0.40 each, requires LUMA_API_KEY)</div>
                   </div>
                   <div className={`pill-toggle ${videoOn ? "on" : ""}`} />
-                </div>
-                <div className={`feature-panel ${lumaOpen ? "open" : ""}`}>
-                  <div className="feature-panel-inner">
-                    <div className="key-row">
-                      <input
-                        className="key-input"
-                        type="password"
-                        placeholder="luma-xxxxxxxxxxxxxxxx"
-                        value={lumaKey}
-                        onChange={e => setLumaKey(e.target.value)}
-                      />
-                      <span className="key-tag">Your Key</span>
-                    </div>
-                    <p className="luma-note">
-                      Get your key at <a href="https://lumalabs.ai/dream-machine/api" target="_blank" rel="noopener noreferrer">lumalabs.ai/dream-machine/api</a>. Videos take 30-120 sec each. Never stored server-side.
-                    </p>
-                  </div>
                 </div>
               </div>
 

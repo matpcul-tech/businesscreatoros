@@ -31,6 +31,41 @@ app.post("/api/generate", async (req, res) => {
   }
 });
 
+app.post("/api/luma/generate", async (req, res) => {
+  const key = process.env.LUMA_API_KEY;
+  if (!key) {
+    return res.status(500).json({ detail: "LUMA_API_KEY is not set on the server." });
+  }
+  try {
+    const upstream = await fetch("https://api.lumalabs.ai/dream-machine/v1/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    res.status(502).json({ detail: `Upstream error: ${err.message}` });
+  }
+});
+
+app.get("/api/luma/poll/:id", async (req, res) => {
+  const key = process.env.LUMA_API_KEY;
+  if (!key) {
+    return res.status(500).json({ detail: "LUMA_API_KEY is not set on the server." });
+  }
+  try {
+    const upstream = await fetch(
+      `https://api.lumalabs.ai/dream-machine/v1/generations/${req.params.id}`,
+      { headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" } }
+    );
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    res.status(502).json({ detail: `Upstream error: ${err.message}` });
+  }
+});
+
 // Serve built frontend in production
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(join(__dirname, "../dist")));
