@@ -709,17 +709,9 @@ ${videoField}`;
     const iv = setInterval(() => { si = (si + 1) % stages.length; setStage(stages[si]); }, 1800);
 
     try {
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("Add VITE_ANTHROPIC_API_KEY to your .env file, then rebuild.");
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 3000,
