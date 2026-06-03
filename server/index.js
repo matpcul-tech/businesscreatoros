@@ -90,7 +90,7 @@ async function start() {
     app.use(vite.middlewares);
   }
 
-  const PORT = process.env.PORT || 3001;
+  const PORT = process.env.PORT || 5173;
   app.listen(PORT, "0.0.0.0", () => console.log(`Server: http://localhost:${PORT}`));
 }
 
