@@ -654,19 +654,6 @@ export default function CreatorBusinessOS() {
   const generate = async () => {
     if (!url.trim() || platforms.length === 0) return;
     setError("");
-
-    // Verify the API server is reachable before switching screens
-    try {
-      const health = await fetch("/api/health");
-      if (!health.ok) throw new Error();
-      const { anthropic, luma } = await health.json();
-      if (!anthropic) { setError("ANTHROPIC_API_KEY is missing from your .env file."); return; }
-      if (videoOn && !luma) { setError("LUMA_API_KEY is missing from your .env file."); return; }
-    } catch {
-      setError("Cannot reach the API server. Run: npm run dev");
-      return;
-    }
-
     setScreen("loading");
     setProgress(0);
 
@@ -722,9 +709,17 @@ ${videoField}`;
     const iv = setInterval(() => { si = (si + 1) % stages.length; setStage(stages[si]); }, 1800);
 
     try {
-      const res = await fetch("/api/generate", {
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("Add VITE_ANTHROPIC_API_KEY to your .env file, then rebuild.");
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 3000,
@@ -735,7 +730,7 @@ ${videoField}`;
       clearInterval(iv);
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
-        throw new Error(e.error?.message || `Server error ${res.status}`);
+        throw new Error(e.error?.message || `API error ${res.status}`);
       }
 
       const data = await res.json();
