@@ -637,6 +637,7 @@ export default function CreatorBusinessOS() {
   const [copiedId, setCopiedId] = useState(null);
   const [mediaLoaded, setMediaLoaded] = useState({});
   const [videoOn, setVideoOn] = useState(false);
+  const [commercials, setCommercials] = useState({});
 
   const cardRef = useRef(null);
   const dragStart = useRef(null);
@@ -651,6 +652,48 @@ export default function CreatorBusinessOS() {
 
   const postCount = (n) => `${n} post${n !== 1 ? "s" : ""}`;
 
+  const renderCommercial = async (post) => {
+    const id = post.id;
+    setCommercials(c => ({ ...c, [id]: { status: "fetching" } }));
+    try {
+      const terms = Array.isArray(post.searchTerms) ? post.searchTerms : [post.unsplashQuery || "business"];
+      const clipsRes = await fetch("/api/pexels-clips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ terms, orientation: "landscape" }),
+      });
+      if (!clipsRes.ok) throw new Error("Pexels clips failed");
+      const clipsData = await clipsRes.json();
+      const urls = clipsData.clips.filter(c => c.url).map(c => c.url);
+      if (urls.length === 0) throw new Error("No clips found");
+
+      setCommercials(c => ({ ...c, [id]: { status: "rendering" } }));
+      const renderRes = await fetch("/api/render-commercial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script: post.script, clips: urls, orientation: "landscape" }),
+      });
+      if (!renderRes.ok) throw new Error("Render submission failed");
+      const renderData = await renderRes.json();
+      const project = renderData.project;
+
+      for (let attempt = 0; attempt < 60; attempt++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const statusRes = await fetch("/api/render-status?project=" + encodeURIComponent(project));
+        if (!statusRes.ok) continue;
+        const statusData = await statusRes.json();
+        if (statusData.status === "done" && statusData.url) {
+          setCommercials(c => ({ ...c, [id]: { status: "done", url: statusData.url } }));
+          return;
+        }
+        if (statusData.status === "error") throw new Error(statusData.message || "Render error");
+      }
+      throw new Error("Commercial render timed out");
+    } catch {
+      setCommercials(c => ({ ...c, [id]: { status: "error" } }));
+    }
+  };
+
   const generate = async () => {
     if (!url.trim() || platforms.length === 0) return;
     setError("");
@@ -662,7 +705,7 @@ export default function CreatorBusinessOS() {
     const ctx = brandContext.trim() ? `\n\nBRAND CONTEXT:\n${brandContext.trim()}` : "";
     const videoField = videoOn
       ? `- "videoPrompt": a cinematic 5-second scene description (15 words max, describe motion, mood, lighting)`
-      : `- "unsplashQuery": 2-3 keywords for a relevant stock photo`;
+      : `- "script": a 20-30 word voiceover script for a 6-second commercial (conversational, no em dashes)\n- "searchTerms": array of 3 visual search terms for stock footage (e.g. ["coffee shop", "laptop work", "city street"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
 
     const prompt = `You are an expert social media strategist writing platform-native content for a real business.
 
@@ -714,7 +757,7 @@ ${videoField}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 3000,
+          max_tokens: 4000,
           messages: [{ role: "user", content: prompt }],
         }),
       });
@@ -771,14 +814,17 @@ ${videoField}`;
           id: i,
         })));
       } else {
-        setPosts(parsed.map((p, i) => ({
+        const newPosts = parsed.map((p, i) => ({
           ...p,
           platform: p.platform || platforms[i % platforms.length],
           videoUrl: null,
           imageUrl: `https://loremflickr.com/800/500/${encodeURIComponent((p.unsplashQuery || "business").replace(/\s+/g, ","))}?lock=${i}`,
           hasVideo: false,
           id: i,
-        })));
+        }));
+        setCommercials({});
+        setPosts(newPosts);
+        newPosts.forEach(p => renderCommercial(p));
       }
 
       setProgress(100);
@@ -849,7 +895,7 @@ ${videoField}`;
     });
   };
 
-  const reset = () => { setScreen("intake"); setPosts([]); setSaved([]); setIndex(0); setError(""); setProgress(0); };
+  const reset = () => { setScreen("intake"); setPosts([]); setSaved([]); setIndex(0); setError(""); setProgress(0); setCommercials({}); };
 
   const cur = posts[index];
   const curCharInfo = cur ? charInfo(cur.caption, cur.platform) : null;
@@ -1047,33 +1093,85 @@ Topics or themes to emphasize.`}
                 <div className="stamp-wrap skip-stamp"><span className="stamp skip">Skip</span></div>
 
                 <div className="card-media">
-                  {!mediaLoaded[cur.id] && (
-                    <div className="media-loading">
-                      <div className="media-spin" />
-                      <p className="media-label-text">{cur.hasVideo ? "Loading video" : "Loading image"}</p>
-                    </div>
-                  )}
-                  {cur.hasVideo && cur.videoUrl ? (
-                    <>
-                      <video
-                        className={`card-video ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
-                        src={cur.videoUrl}
-                        autoPlay muted loop playsInline
-                        onLoadedData={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
-                        draggable={false}
-                      />
-                      <div className="ai-video-tag">Luma AI</div>
-                    </>
-                  ) : (
-                    <img
-                      className={`card-img ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
-                      src={cur.imageUrl}
-                      alt=""
-                      onLoad={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
-                      onError={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
-                      draggable={false}
-                    />
-                  )}
+                  {(() => {
+                    const comm = commercials[cur.id];
+                    if (cur.hasVideo && cur.videoUrl) {
+                      return (
+                        <>
+                          {!mediaLoaded[cur.id] && (
+                            <div className="media-loading">
+                              <div className="media-spin" />
+                              <p className="media-label-text">Loading video</p>
+                            </div>
+                          )}
+                          <video
+                            className={`card-video ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
+                            src={cur.videoUrl}
+                            autoPlay muted loop playsInline
+                            onLoadedData={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                            draggable={false}
+                          />
+                          <div className="ai-video-tag">Luma AI</div>
+                        </>
+                      );
+                    }
+                    if (comm && comm.status === "done" && comm.url) {
+                      return (
+                        <>
+                          {!mediaLoaded[cur.id] && (
+                            <div className="media-loading">
+                              <div className="media-spin" />
+                              <p className="media-label-text">Loading commercial</p>
+                            </div>
+                          )}
+                          <video
+                            className={`card-video ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
+                            src={comm.url}
+                            autoPlay muted loop playsInline
+                            onLoadedData={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                            draggable={false}
+                          />
+                          <div className="ai-video-tag">Commercial</div>
+                        </>
+                      );
+                    }
+                    if (comm && (comm.status === "fetching" || comm.status === "rendering")) {
+                      return (
+                        <>
+                          <img
+                            className={`card-img ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
+                            src={cur.imageUrl}
+                            alt=""
+                            onLoad={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                            onError={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                            draggable={false}
+                          />
+                          <div className="media-loading" style={{ background: "rgba(15,23,42,0.45)" }}>
+                            <div className="media-spin" />
+                            <p className="media-label-text" style={{ color: "rgba(255,255,255,0.8)" }}>Rendering commercial</p>
+                          </div>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        {!mediaLoaded[cur.id] && (
+                          <div className="media-loading">
+                            <div className="media-spin" />
+                            <p className="media-label-text">Loading image</p>
+                          </div>
+                        )}
+                        <img
+                          className={`card-img ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
+                          src={cur.imageUrl}
+                          alt=""
+                          onLoad={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                          onError={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
+                          draggable={false}
+                        />
+                      </>
+                    );
+                  })()}
                   <div className="card-media-overlay" />
                 </div>
 
@@ -1083,9 +1181,13 @@ Topics or themes to emphasize.`}
                     <span className="c-platform">{cur.platform}</span>
                     <div className="c-badges">
                       {curCharInfo?.over && <span className="c-badge warn">Over limit</span>}
-                      <span className={`c-badge ${cur.hasVideo ? "video" : ""}`}>
-                        {cur.hasVideo ? "AI Video" : "AI Draft"}
-                      </span>
+                      {(() => {
+                        const comm = commercials[cur.id];
+                        if (cur.hasVideo) return <span className="c-badge video">AI Video</span>;
+                        if (comm && comm.status === "done") return <span className="c-badge video">Commercial</span>;
+                        if (comm && (comm.status === "fetching" || comm.status === "rendering")) return <span className="c-badge warn">Rendering...</span>;
+                        return <span className="c-badge">AI Draft</span>;
+                      })()}
                     </div>
                   </div>
                   <p className="card-caption">{cur.caption}</p>
@@ -1152,6 +1254,8 @@ Topics or themes to emphasize.`}
                   <div className="saved-media">
                     {post.hasVideo && post.videoUrl ? (
                       <video className="saved-vid" src={post.videoUrl} autoPlay muted loop playsInline />
+                    ) : commercials[post.id]?.status === "done" && commercials[post.id]?.url ? (
+                      <video className="saved-vid" src={commercials[post.id].url} autoPlay muted loop playsInline />
                     ) : (
                       <img className="saved-img" src={post.imageUrl} alt="" />
                     )}
@@ -1161,7 +1265,9 @@ Topics or themes to emphasize.`}
                     <div className="saved-platform-row">
                       <span className="s-dot" style={{ background: PLATFORM_COLORS[post.platform] || "#999" }} />
                       <span className="s-platform">{post.platform}</span>
-                      {post.hasVideo && <span className="s-video-tag">AI Video</span>}
+                      {(post.hasVideo || commercials[post.id]?.status === "done") && (
+                        <span className="s-video-tag">{post.hasVideo ? "AI Video" : "Commercial"}</span>
+                      )}
                     </div>
                     <p className="saved-caption">{post.caption}</p>
                     <p className="saved-hashtags">{post.hashtags}</p>
@@ -1172,11 +1278,15 @@ Topics or themes to emphasize.`}
                       >
                         {copiedId === post.id ? "Copied!" : "Copy Caption + Hashtags"}
                       </button>
-                      {post.hasVideo && post.videoUrl && (
+                      {post.hasVideo && post.videoUrl ? (
                         <a className="dl-btn" href={post.videoUrl} target="_blank" rel="noopener noreferrer" download>
                           Save Video
                         </a>
-                      )}
+                      ) : commercials[post.id]?.status === "done" && commercials[post.id]?.url ? (
+                        <a className="dl-btn" href={commercials[post.id].url} target="_blank" rel="noopener noreferrer" download>
+                          Save Commercial
+                        </a>
+                      ) : null}
                     </div>
                   </div>
                 </div>
