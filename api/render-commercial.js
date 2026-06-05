@@ -28,6 +28,8 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Provide at least one clip URL." });
   }
 
+  const totalDuration = clips.length * sceneDuration;
+
   const scenes = clips.map(function (clipUrl) {
     return {
       elements: [
@@ -35,6 +37,7 @@ export default async function handler(req, res) {
           type: "video",
           src: clipUrl,
           duration: sceneDuration,
+          volume: 0,
         },
       ],
     };
@@ -49,6 +52,8 @@ export default async function handler(req, res) {
         text: script,
         model: "azure",
         voice: "en-US-JennyNeural",
+        duration: totalDuration,
+        start: 0,
       },
     ],
   };
