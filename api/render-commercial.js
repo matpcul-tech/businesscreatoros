@@ -47,6 +47,7 @@ export default async function handler(req, res) {
       {
         type: "voice",
         text: script,
+        model: "google",
         voice: "en-US-Wavenet-D",
       },
     ],
