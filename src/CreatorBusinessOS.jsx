@@ -774,7 +774,7 @@ ${videoField}`;
         ...p,
         platform: p.platform || platforms[i % platforms.length],
         videoUrl: null,
-        imageUrl: `https://loremflickr.com/800/500/${encodeURIComponent((p.unsplashQuery || "business").replace(/\s+/g, ","))}?lock=${i}`,
+        imageUrl: `https://picsum.photos/seed/${encodeURIComponent((p.unsplashQuery || "business").replace(/\s+/g, "_"))}_${i}/800/500`,
         hasVideo: false,
         id: i,
       }));
@@ -1130,6 +1130,7 @@ Topics or themes to emphasize.`}
                         if (cur.hasVideo) return <span className="c-badge video">AI Video</span>;
                         if (comm && comm.status === "done") return <span className="c-badge video">Commercial</span>;
                         if (comm && (comm.status === "fetching" || comm.status === "rendering")) return <span className="c-badge warn">Rendering...</span>;
+                        if (comm && comm.status === "error") return <span className="c-badge warn">No video</span>;
                         return <span className="c-badge">AI Draft</span>;
                       })()}
                     </div>
@@ -1196,13 +1197,27 @@ Topics or themes to emphasize.`}
               {saved.map(post => (
                 <div key={post.id} className="saved-card">
                   <div className="saved-media">
-                    {post.hasVideo && post.videoUrl ? (
-                      <video className="saved-vid" src={post.videoUrl} autoPlay muted loop playsInline />
-                    ) : commercials[post.id]?.status === "done" && commercials[post.id]?.url ? (
-                      <video className="saved-vid" src={commercials[post.id].url} autoPlay muted loop playsInline />
-                    ) : (
-                      <img className="saved-img" src={post.imageUrl} alt="" />
-                    )}
+                    {(() => {
+                      const comm = commercials[post.id];
+                      if (post.hasVideo && post.videoUrl) {
+                        return <video className="saved-vid" src={post.videoUrl} autoPlay muted loop playsInline />;
+                      }
+                      if (comm && comm.status === "done" && comm.url) {
+                        return <video className="saved-vid" src={comm.url} autoPlay muted loop playsInline />;
+                      }
+                      if (comm && (comm.status === "fetching" || comm.status === "rendering")) {
+                        return (
+                          <>
+                            <img className="saved-img" src={post.imageUrl} alt="" />
+                            <div style={{ position: "absolute", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                              <div className="media-spin" />
+                              <p className="media-label-text" style={{ color: "rgba(255,255,255,0.85)" }}>Rendering commercial</p>
+                            </div>
+                          </>
+                        );
+                      }
+                      return <img className="saved-img" src={post.imageUrl} alt="" />;
+                    })()}
                     <div className="saved-media-overlay" />
                   </div>
                   <div className="saved-body">
@@ -1211,6 +1226,9 @@ Topics or themes to emphasize.`}
                       <span className="s-platform">{post.platform}</span>
                       {(post.hasVideo || commercials[post.id]?.status === "done") && (
                         <span className="s-video-tag">{post.hasVideo ? "AI Video" : "Commercial"}</span>
+                      )}
+                      {commercials[post.id]?.status === "error" && (
+                        <span className="s-video-tag" style={{ color: "var(--amber)", background: "var(--amber-light)" }}>No video</span>
                       )}
                     </div>
                     <p className="saved-caption">{post.caption}</p>
