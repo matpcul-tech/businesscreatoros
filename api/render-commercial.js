@@ -20,13 +20,8 @@ export default async function handler(req, res) {
   const clips = Array.isArray(body.clips) ? body.clips.filter(Boolean) : [];
   const orientation = body.orientation === "portrait" ? "portrait" : "landscape";
 
-  // Seconds of screen time per clip. Roughly target_length / clip_count.
-  // Default 5s per clip, so 6 clips makes a ~30 second commercial.
+  // Seconds of screen time per clip.
   const sceneDuration = Number(body.sceneDuration) || 5;
-
-  // ElevenLabs Flash is fast and natural. Override from the client if wanted.
-  const voiceModel = body.voiceModel || "elevenlabs-flash-v2-5";
-  const voiceName = body.voiceName || "en-US-AriaNeural";
 
   if (!script) {
     return res.status(400).json({ error: "Provide a script string." });
@@ -35,8 +30,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Provide at least one clip URL." });
   }
 
-  // One scene per clip. Each clip is trimmed to sceneDuration so the pacing
-  // stays tight. Scenes play in order and define the total video length.
+  // One scene per clip. Each clip is trimmed to sceneDuration.
   const scenes = clips.map(function (clipUrl) {
     return {
       elements: [
@@ -50,8 +44,8 @@ export default async function handler(req, res) {
     };
   });
 
-  // Movie level elements overlay every scene.
-  // The voice spans the whole commercial. Subtitles auto transcribe the voice.
+  // Microsoft Azure Neural voice -- matches "en-US-AriaNeural" naming convention.
+  // model "microsoft" + voice "en-US-AriaNeural" is a valid JSON2Video combination.
   const movie = {
     quality: "high",
     scenes: scenes,
@@ -59,8 +53,8 @@ export default async function handler(req, res) {
       {
         type: "voice",
         text: script,
-        model: voiceModel,
-        voice: voiceName,
+        model: "microsoft",
+        voice: "en-US-AriaNeural",
       },
       {
         type: "subtitles",
@@ -93,9 +87,10 @@ export default async function handler(req, res) {
     const data = await r.json();
 
     if (!r.ok || data.success === false) {
+      console.error("JSON2Video error", r.status, JSON.stringify(data));
       return res.status(502).json({
         error: "JSON2Video rejected the render.",
-        detail: data && (data.message || data.error || data),
+        detail: data && (data.message || data.error || JSON.stringify(data)),
       });
     }
 
@@ -105,6 +100,7 @@ export default async function handler(req, res) {
       estimatedSeconds: scenes.length * sceneDuration,
     });
   } catch (err) {
+    console.error("JSON2Video fetch failed", err);
     return res.status(500).json({ error: "JSON2Video request failed.", detail: String(err) });
   }
 }

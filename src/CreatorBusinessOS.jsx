@@ -658,10 +658,13 @@ export default function CreatorBusinessOS() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ terms, orientation: "landscape" }),
       });
-      if (!clipsRes.ok) throw new Error("Pexels clips failed");
+      if (!clipsRes.ok) {
+        const clipsErr = await clipsRes.json().catch(() => ({}));
+        throw new Error(`Pexels clips failed: ${clipsErr.error || clipsRes.status}`);
+      }
       const clipsData = await clipsRes.json();
       const urls = clipsData.clips.filter(c => c.url).map(c => c.url);
-      if (urls.length === 0) throw new Error("No clips found");
+      if (urls.length === 0) throw new Error("No clips found for search terms");
 
       setCommercials(c => ({ ...c, [id]: { status: "rendering" } }));
       const renderRes = await fetch("/api/render-commercial", {
@@ -669,9 +672,13 @@ export default function CreatorBusinessOS() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ script: post.script, clips: urls, orientation: "landscape" }),
       });
-      if (!renderRes.ok) throw new Error("Render submission failed");
+      if (!renderRes.ok) {
+        const renderErr = await renderRes.json().catch(() => ({}));
+        throw new Error(`Render submission failed: ${renderErr.detail || renderErr.error || renderRes.status}`);
+      }
       const renderData = await renderRes.json();
       const project = renderData.project;
+      if (!project) throw new Error("No project id returned from JSON2Video");
 
       for (let attempt = 0; attempt < 60; attempt++) {
         await new Promise(r => setTimeout(r, 5000));
@@ -684,9 +691,10 @@ export default function CreatorBusinessOS() {
         }
         if (statusData.status === "error") throw new Error(statusData.message || "Render error");
       }
-      throw new Error("Commercial render timed out");
-    } catch {
-      setCommercials(c => ({ ...c, [id]: { status: "error" } }));
+      throw new Error("Commercial render timed out after 5 minutes");
+    } catch (err) {
+      console.error(`[commercial] post ${id} failed:`, err.message);
+      setCommercials(c => ({ ...c, [id]: { status: "error", message: err.message } }));
     }
   };
 
