@@ -23,13 +23,13 @@ export default async function handler(req, res) {
     });
 
     const data = await r.json();
+    console.log("JSON2Video status response:", JSON.stringify(data));
+
     const movie = (data && data.movie) || {};
 
-    // status values: "running", "done", "error"
     return res.status(200).json({
       status: movie.status || "unknown",
-      url: movie.url || null,       // final mp4 once done
-      subtitles: movie.ass || null, // generated subtitle file
+      url: movie.url || null,
       message: movie.message || null,
       remaining: data && data.remaining_quota ? data.remaining_quota.time : null,
     });

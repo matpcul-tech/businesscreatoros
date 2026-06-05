@@ -19,8 +19,6 @@ export default async function handler(req, res) {
   const script = (body.script || "").trim();
   const clips = Array.isArray(body.clips) ? body.clips.filter(Boolean) : [];
   const orientation = body.orientation === "portrait" ? "portrait" : "landscape";
-
-  // Seconds of screen time per clip.
   const sceneDuration = Number(body.sceneDuration) || 5;
 
   if (!script) {
@@ -30,7 +28,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Provide at least one clip URL." });
   }
 
-  // One scene per clip. Each clip is trimmed to sceneDuration.
   const scenes = clips.map(function (clipUrl) {
     return {
       elements: [
@@ -38,14 +35,11 @@ export default async function handler(req, res) {
           type: "video",
           src: clipUrl,
           duration: sceneDuration,
-          resize: "cover",
         },
       ],
     };
   });
 
-  // Microsoft Azure Neural voice -- matches "en-US-AriaNeural" naming convention.
-  // model "microsoft" + voice "en-US-AriaNeural" is a valid JSON2Video combination.
   const movie = {
     quality: "high",
     scenes: scenes,
@@ -56,14 +50,6 @@ export default async function handler(req, res) {
         model: "microsoft",
         voice: "en-US-AriaNeural",
       },
-      {
-        type: "subtitles",
-        settings: {
-          style: "classic",
-          "font-size": orientation === "portrait" ? 64 : 48,
-          position: "bottom-center",
-        },
-      },
     ],
   };
 
@@ -73,6 +59,8 @@ export default async function handler(req, res) {
   } else {
     movie.resolution = "full-hd";
   }
+
+  console.log("Submitting to JSON2Video:", JSON.stringify(movie));
 
   try {
     const r = await fetch(J2V_ENDPOINT, {
@@ -85,9 +73,9 @@ export default async function handler(req, res) {
     });
 
     const data = await r.json();
+    console.log("JSON2Video submit response:", JSON.stringify(data));
 
     if (!r.ok || data.success === false) {
-      console.error("JSON2Video error", r.status, JSON.stringify(data));
       return res.status(502).json({
         error: "JSON2Video rejected the render.",
         detail: data && (data.message || data.error || JSON.stringify(data)),
@@ -100,7 +88,7 @@ export default async function handler(req, res) {
       estimatedSeconds: scenes.length * sceneDuration,
     });
   } catch (err) {
-    console.error("JSON2Video fetch failed", err);
+    console.error("JSON2Video fetch failed:", err);
     return res.status(500).json({ error: "JSON2Video request failed.", detail: String(err) });
   }
 }

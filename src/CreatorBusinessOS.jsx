@@ -689,7 +689,7 @@ export default function CreatorBusinessOS() {
           setCommercials(c => ({ ...c, [id]: { status: "done", url: statusData.url } }));
           return;
         }
-        if (statusData.status === "error") throw new Error(statusData.message || "Render error");
+        if (statusData.status === "error") throw new Error(statusData.message || statusData.detail || "Render error from JSON2Video");
       }
       throw new Error("Commercial render timed out after 10 minutes");
     } catch (err) {
@@ -1138,7 +1138,7 @@ Topics or themes to emphasize.`}
                         if (cur.hasVideo) return <span className="c-badge video">AI Video</span>;
                         if (comm && comm.status === "done") return <span className="c-badge video">Commercial</span>;
                         if (comm && (comm.status === "fetching" || comm.status === "rendering")) return <span className="c-badge warn">Rendering...</span>;
-                        if (comm && comm.status === "error") return <span className="c-badge warn">No video</span>;
+                        if (comm && comm.status === "error") return <span className="c-badge warn" title={comm.message || ""}>No video</span>;
                         return <span className="c-badge">AI Draft</span>;
                       })()}
                     </div>
