@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const PLATFORMS = ["Instagram", "LinkedIn", "Facebook", "X", "TikTok"];
 
@@ -51,31 +51,6 @@ const extractJSON = (text) => {
   throw new Error("Could not parse AI response. Please try again.");
 };
 
-const pollLuma = async (generationId, maxAttempts = 30) => {
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(r => setTimeout(r, 4000));
-    const res = await fetch(`/api/luma/poll/${generationId}`);
-    if (!res.ok) throw new Error("Luma polling error");
-    const data = await res.json();
-    if (data.state === "completed" && data.assets?.video) return data.assets.video;
-    if (data.state === "failed") throw new Error("Luma generation failed");
-  }
-  throw new Error("Video generation timed out");
-};
-
-const generateLumaVideo = async (prompt) => {
-  const res = await fetch("/api/luma/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, aspect_ratio: "9:16", loop: false }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`Luma: ${err.detail || res.statusText}`);
-  }
-  const data = await res.json();
-  return data.id;
-};
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
@@ -636,8 +611,31 @@ export default function CreatorBusinessOS() {
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState(null);
   const [mediaLoaded, setMediaLoaded] = useState({});
-  const [videoOn, setVideoOn] = useState(false);
   const [commercials, setCommercials] = useState({});
+
+  useEffect(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem("cbos") || "null");
+      if (!d) return;
+      if (d.screen && d.screen !== "loading") setScreen(d.screen);
+      if (d.posts) setPosts(d.posts);
+      if (typeof d.index === "number") setIndex(d.index);
+      if (d.saved) setSaved(d.saved);
+      if (d.commercials) {
+        const clean = {};
+        for (const [k, v] of Object.entries(d.commercials)) {
+          if (v && v.status === "done") clean[k] = v;
+        }
+        setCommercials(clean);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cbos", JSON.stringify({ screen, posts, index, saved, commercials }));
+    } catch {}
+  }, [screen, posts, index, saved, commercials]);
 
   const cardRef = useRef(null);
   const dragStart = useRef(null);
@@ -647,8 +645,6 @@ export default function CreatorBusinessOS() {
   const togglePlatform = p => setPlatforms(prev =>
     prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
   );
-
-  const handleVideoToggle = () => setVideoOn(v => !v);
 
   const postCount = (n) => `${n} post${n !== 1 ? "s" : ""}`;
 
@@ -703,9 +699,7 @@ export default function CreatorBusinessOS() {
     const selectedGoal = GOALS.find(g => g.id === goal);
     const count = Math.min(platforms.length * 2, 8);
     const ctx = brandContext.trim() ? `\n\nBRAND CONTEXT:\n${brandContext.trim()}` : "";
-    const videoField = videoOn
-      ? `- "videoPrompt": a cinematic 5-second scene description (15 words max, describe motion, mood, lighting)`
-      : `- "script": a 20-30 word voiceover script for a 6-second commercial (conversational, no em dashes)\n- "searchTerms": array of 3 visual search terms for stock footage (e.g. ["coffee shop", "laptop work", "city street"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
+    const videoField = `- "script": a 20-30 word voiceover script for a 6-second commercial (conversational, no em dashes)\n- "searchTerms": array of 3 visual search terms for stock footage (e.g. ["coffee shop", "laptop work", "city street"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
 
     const prompt = `You are an expert social media strategist writing platform-native content for a real business.
 
@@ -776,56 +770,17 @@ ${videoField}`;
 
       setProgress(30);
 
-      if (videoOn) {
-        setStage("Generating videos...");
-        setDetail("Submitting to Luma AI");
-        setProgress(40);
-
-        const genIds = [];
-        for (let i = 0; i < parsed.length; i++) {
-          const vp = parsed[i].videoPrompt || "cinematic business scene, elegant motion, golden hour";
-          try {
-            setDetail(`Submitting video ${i + 1} of ${parsed.length}`);
-            const gid = await generateLumaVideo(vp);
-            genIds.push({ i, gid });
-          } catch { genIds.push({ i, gid: null }); }
-          setProgress(40 + ((i + 1) / parsed.length) * 20);
-        }
-
-        setStage("Rendering videos...");
-        setDetail("30-120 seconds per clip");
-
-        const videoUrls = new Array(parsed.length).fill(null);
-        await Promise.all(genIds.filter(g => g.gid).map(async ({ i, gid }) => {
-          try {
-            setDetail(`Rendering video ${i + 1}...`);
-            videoUrls[i] = await pollLuma(gid);
-            setProgress(p => Math.min(p + (40 / genIds.length), 90));
-          } catch { videoUrls[i] = null; }
-        }));
-
-        setProgress(98);
-        setPosts(parsed.map((p, i) => ({
-          ...p,
-          platform: p.platform || platforms[i % platforms.length],
-          videoUrl: videoUrls[i],
-          imageUrl: null,
-          hasVideo: !!videoUrls[i],
-          id: i,
-        })));
-      } else {
-        const newPosts = parsed.map((p, i) => ({
-          ...p,
-          platform: p.platform || platforms[i % platforms.length],
-          videoUrl: null,
-          imageUrl: `https://loremflickr.com/800/500/${encodeURIComponent((p.unsplashQuery || "business").replace(/\s+/g, ","))}?lock=${i}`,
-          hasVideo: false,
-          id: i,
-        }));
-        setCommercials({});
-        setPosts(newPosts);
-        newPosts.forEach(p => renderCommercial(p));
-      }
+      const newPosts = parsed.map((p, i) => ({
+        ...p,
+        platform: p.platform || platforms[i % platforms.length],
+        videoUrl: null,
+        imageUrl: `https://loremflickr.com/800/500/${encodeURIComponent((p.unsplashQuery || "business").replace(/\s+/g, ","))}?lock=${i}`,
+        hasVideo: false,
+        id: i,
+      }));
+      setCommercials({});
+      setPosts(newPosts);
+      newPosts.forEach(p => renderCommercial(p));
 
       setProgress(100);
       setIndex(0);
@@ -895,7 +850,10 @@ ${videoField}`;
     });
   };
 
-  const reset = () => { setScreen("intake"); setPosts([]); setSaved([]); setIndex(0); setError(""); setProgress(0); setCommercials({}); };
+  const reset = () => {
+    setScreen("intake"); setPosts([]); setSaved([]); setIndex(0); setError(""); setProgress(0); setCommercials({});
+    try { localStorage.removeItem("cbos"); } catch {}
+  };
 
   const cur = posts[index];
   const curCharInfo = cur ? charInfo(cur.caption, cur.platform) : null;
@@ -913,7 +871,7 @@ ${videoField}`;
           <div className="nav-badge">
             {screen === "swipe" ? `${posts.length - index} left` :
              screen === "saved" ? `${postCount(saved.length)} ready` :
-             videoOn ? "AI Video On" : "v4"}
+             "v4"}
           </div>
         </nav>
 
@@ -981,18 +939,6 @@ ${videoField}`;
                 </div>
               </div>
 
-              {/* VIDEO TOGGLE */}
-              <div className={`feature-card ${videoOn ? "active" : ""}`}>
-                <div className="feature-row" onClick={handleVideoToggle}>
-                  <div className={`feature-icon ${videoOn ? "active" : ""}`}>🎬</div>
-                  <div className="feature-text">
-                    <div className="feature-title">AI Video Generation</div>
-                    <div className="feature-sub">Luma Dream Machine -- 5-sec cinematic clip per post (~$0.40 each, requires LUMA_API_KEY)</div>
-                  </div>
-                  <div className={`pill-toggle ${videoOn ? "on" : ""}`} />
-                </div>
-              </div>
-
               {/* BRAND CONTEXT */}
               <div>
                 <div className="context-toggle" onClick={() => setCtxOpen(o => !o)}>
@@ -1042,9 +988,7 @@ Topics or themes to emphasize.`}
                 onClick={generate}
                 disabled={!url.trim() || platforms.length === 0}
               >
-                {videoOn
-                  ? `Generate ${Math.min(platforms.length * 2, 8)} Posts + Videos`
-                  : `Generate ${Math.min(platforms.length * 2, 8)} Posts`}
+                {`Generate ${Math.min(platforms.length * 2, 8)} Posts`}
               </button>
 
               {error && <div className="error-box">{error}</div>}
@@ -1056,7 +1000,7 @@ Topics or themes to emphasize.`}
         {screen === "loading" && (
           <div className="loading">
             <div className="spin-ring" />
-            <p className="load-title">{videoOn ? "Generating content..." : "Writing your posts..."}</p>
+            <p className="load-title">Writing your posts...</p>
             <p className="load-stage">{stage}</p>
             <div className="load-bar-wrap">
               <div className="load-bar" style={{ width: `${progress}%` }} />
