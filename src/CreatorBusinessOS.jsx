@@ -680,7 +680,7 @@ export default function CreatorBusinessOS() {
       const project = renderData.project;
       if (!project) throw new Error("No project id returned from JSON2Video");
 
-      for (let attempt = 0; attempt < 60; attempt++) {
+      for (let attempt = 0; attempt < 120; attempt++) {
         await new Promise(r => setTimeout(r, 5000));
         const statusRes = await fetch("/api/render-status?project=" + encodeURIComponent(project));
         if (!statusRes.ok) continue;
@@ -691,7 +691,7 @@ export default function CreatorBusinessOS() {
         }
         if (statusData.status === "error") throw new Error(statusData.message || "Render error");
       }
-      throw new Error("Commercial render timed out after 5 minutes");
+      throw new Error("Commercial render timed out after 10 minutes");
     } catch (err) {
       console.error(`[commercial] post ${id} failed:`, err.message);
       setCommercials(c => ({ ...c, [id]: { status: "error", message: err.message } }));
