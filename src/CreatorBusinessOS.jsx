@@ -1145,6 +1145,11 @@ Topics or themes to emphasize.`}
                   </div>
                   <p className="card-caption">{cur.caption}</p>
                   <p className="card-hashtags">{cur.hashtags}</p>
+                  {commercials[cur.id]?.status === "error" && commercials[cur.id]?.message && (
+                    <p style={{ fontSize: 11, color: "var(--amber)", lineHeight: 1.4, marginTop: -4 }}>
+                      Video error: {commercials[cur.id].message}
+                    </p>
+                  )}
                   {curCharInfo && (
                     <div className="card-char-row">
                       <div className="char-bar">
