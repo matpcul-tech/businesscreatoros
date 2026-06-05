@@ -1079,7 +1079,7 @@ Topics or themes to emphasize.`}
                           <video
                             className={`card-video ${mediaLoaded[cur.id] ? "visible" : "hidden"}`}
                             src={comm.url}
-                            autoPlay muted loop playsInline
+                            autoPlay loop playsInline
                             onLoadedData={() => setMediaLoaded(p => ({ ...p, [cur.id]: true }))}
                             draggable={false}
                           />
@@ -1216,7 +1216,7 @@ Topics or themes to emphasize.`}
                         return <video className="saved-vid" src={post.videoUrl} autoPlay muted loop playsInline />;
                       }
                       if (comm && comm.status === "done" && comm.url) {
-                        return <video className="saved-vid" src={comm.url} autoPlay muted loop playsInline />;
+                        return <video className="saved-vid" src={comm.url} autoPlay loop playsInline />;
                       }
                       if (comm && (comm.status === "fetching" || comm.status === "rendering")) {
                         return (
