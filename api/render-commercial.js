@@ -47,8 +47,7 @@ export default async function handler(req, res) {
       {
         type: "voice",
         text: script,
-        model: "microsoft",
-        voice: "en-US-AriaNeural",
+        voice: "en-US-Wavenet-D",
       },
     ],
   };
