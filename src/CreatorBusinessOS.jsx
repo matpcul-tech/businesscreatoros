@@ -707,7 +707,7 @@ export default function CreatorBusinessOS() {
     const selectedGoal = GOALS.find(g => g.id === goal);
     const count = Math.min(platforms.length * 2, 8);
     const ctx = brandContext.trim() ? `\n\nBRAND CONTEXT:\n${brandContext.trim()}` : "";
-    const videoField = `- "script": a 20-30 word voiceover script for a 6-second commercial (conversational, no em dashes)\n- "searchTerms": array of 3 visual search terms for stock footage (e.g. ["coffee shop", "laptop work", "city street"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
+    const videoField = `- "script": a 45-60 word voiceover narration for a 20-second commercial. Must be 3-4 complete sentences. Conversational, no em dashes. Example length: "Most companies protect your data with yesterday's tools. We built something different. Our AI learns your threat landscape in real time and stops attacks before they start. Sovereign Shield. Built for the threats others can't see coming."\n- "searchTerms": array of 3 distinct visual search terms for stock footage (e.g. ["coffee shop", "laptop work", "city street"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
 
     const prompt = `You are an expert social media strategist writing platform-native content for a real business.
 

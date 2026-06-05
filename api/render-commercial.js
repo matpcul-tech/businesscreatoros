@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   const script = (body.script || "").trim();
   const clips = Array.isArray(body.clips) ? body.clips.filter(Boolean) : [];
   const orientation = body.orientation === "portrait" ? "portrait" : "landscape";
-  const sceneDuration = Number(body.sceneDuration) || 5;
+  const sceneDuration = Number(body.sceneDuration) || 8;
 
   if (!script) {
     return res.status(400).json({ error: "Provide a script string." });
