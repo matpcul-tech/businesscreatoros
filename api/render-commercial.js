@@ -6,8 +6,9 @@
 
 const J2V_ENDPOINT = "https://api.json2video.com/v2/movies";
 
-// Rough speaking rate in words per second, used to size the visuals.
-const WORDS_PER_SECOND = 2.5;
+// Rough speaking rate in words per second. Azure TTS runs ~130-140 wpm
+// naturally. 2.0 wps (120 wpm) keeps the video longer than the audio.
+const WORDS_PER_SECOND = 2.0;
 
 // Confirmed transition styles. Cycle them for variety.
 const TRANSITIONS = ["fade", "circleopen", "wipeup"];
@@ -47,8 +48,9 @@ export default async function handler(req, res) {
   const speechSeconds = Math.max(8, Math.ceil(wordCount / WORDS_PER_SECOND));
 
   // About 4 seconds of screen time per clip keeps the pacing energetic.
+  // Add 2 buffer scenes so the video always outlasts the voice audio.
   const perClip = 4;
-  const sceneCount = Math.max(clips.length, Math.ceil(speechSeconds / perClip));
+  const sceneCount = Math.max(clips.length, Math.ceil(speechSeconds / perClip) + 2);
 
   // Build scenes by cycling through the clips so the visuals fill the whole
   // narration even when there are more scenes than unique clips.
@@ -87,7 +89,7 @@ export default async function handler(req, res) {
       text: script,
       model: voiceModel,
       voice: voiceName,
-      "extra-time": 1.5, // small pad so the last word is not clipped
+      "extra-time": 3, // pad so the last word is never clipped
     },
     {
       type: "subtitles",
