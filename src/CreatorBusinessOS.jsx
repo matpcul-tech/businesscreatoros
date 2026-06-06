@@ -39,6 +39,17 @@ const TONE_PROMPTS = {
   witty: "Write in a sharp, clever tone. Use wordplay or unexpected angles where natural. Never forced.",
 };
 
+const VOICES = [
+  { label: "Aria", desc: "Warm female", model: "azure", voice: "en-US-AriaNeural" },
+  { label: "Guy", desc: "Confident male", model: "azure", voice: "en-US-GuyNeural" },
+  { label: "Jenny", desc: "Friendly female", model: "azure", voice: "en-US-JennyNeural" },
+  { label: "Davis", desc: "Calm male", model: "azure", voice: "en-US-DavisNeural" },
+  { label: "Adam", desc: "ElevenLabs", model: "elevenlabs-flash-v2-5", voice: "Adam" },
+  { label: "Rachel", desc: "ElevenLabs", model: "elevenlabs-flash-v2-5", voice: "Rachel" },
+  { label: "Bella", desc: "ElevenLabs", model: "elevenlabs-flash-v2-5", voice: "Bella" },
+  { label: "Antoni", desc: "ElevenLabs", model: "elevenlabs-flash-v2-5", voice: "Antoni" },
+];
+
 const extractJSON = (text) => {
   try { return JSON.parse(text.trim()); } catch {}
   const stripped = text.replace(/```json|```/gi, "").trim();
@@ -592,6 +603,20 @@ const css = `
   .dl-btn:hover { background: var(--green); color: white; border-color: var(--green); }
 
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* VOICE SELECT */
+  .voice-select {
+    width: 100%; padding: 12px 16px;
+    background: var(--white); border: 1.5px solid var(--slate-200);
+    border-radius: var(--radius-sm); outline: none;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 14px; font-weight: 500; color: var(--slate-900);
+    appearance: none; cursor: pointer;
+    box-shadow: var(--shadow-sm); transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .voice-select:focus {
+    border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+  }
 `;
 
 export default function CreatorBusinessOS() {
@@ -612,6 +637,8 @@ export default function CreatorBusinessOS() {
   const [copiedId, setCopiedId] = useState(null);
   const [mediaLoaded, setMediaLoaded] = useState({});
   const [commercials, setCommercials] = useState({});
+  const [voiceModel, setVoiceModel] = useState("azure");
+  const [voiceName, setVoiceName] = useState("en-US-AriaNeural");
 
   useEffect(() => {
     try {
@@ -652,7 +679,9 @@ export default function CreatorBusinessOS() {
     const id = post.id;
     setCommercials(c => ({ ...c, [id]: { status: "fetching" } }));
     try {
-      const terms = Array.isArray(post.searchTerms) ? post.searchTerms : [post.unsplashQuery || "business"];
+      const terms = Array.isArray(post.search_terms) ? post.search_terms :
+                    Array.isArray(post.searchTerms) ? post.searchTerms :
+                    [post.unsplashQuery || "business"];
       const clipsRes = await fetch("/api/pexels-clips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -670,7 +699,7 @@ export default function CreatorBusinessOS() {
       const renderRes = await fetch("/api/render-commercial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: post.script, clips: urls, orientation: "landscape" }),
+        body: JSON.stringify({ script: post.script, clips: urls, orientation: "landscape", voiceModel, voiceName }),
       });
       if (!renderRes.ok) {
         const renderErr = await renderRes.json().catch(() => ({}));
@@ -680,8 +709,8 @@ export default function CreatorBusinessOS() {
       const project = renderData.project;
       if (!project) throw new Error("No project id returned from JSON2Video");
 
-      for (let attempt = 0; attempt < 120; attempt++) {
-        await new Promise(r => setTimeout(r, 5000));
+      for (let attempt = 0; attempt < 150; attempt++) {
+        await new Promise(r => setTimeout(r, 4000));
         const statusRes = await fetch("/api/render-status?project=" + encodeURIComponent(project));
         if (!statusRes.ok) continue;
         const statusData = await statusRes.json();
@@ -707,7 +736,7 @@ export default function CreatorBusinessOS() {
     const selectedGoal = GOALS.find(g => g.id === goal);
     const count = Math.min(platforms.length * 2, 8);
     const ctx = brandContext.trim() ? `\n\nBRAND CONTEXT:\n${brandContext.trim()}` : "";
-    const videoField = `- "script": a 45-60 word voiceover narration for a 20-second commercial. Must be 3-4 complete sentences. Conversational, no em dashes. Example length: "Most companies protect your data with yesterday's tools. We built something different. Our AI learns your threat landscape in real time and stops attacks before they start. Sovereign Shield. Built for the threats others can't see coming."\n- "searchTerms": array of 3 distinct visual search terms for stock footage (e.g. ["coffee shop", "laptop work", "city street"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
+    const videoField = `- "script": a complete 30 to 45 second voiceover narration, roughly 75 to 110 words. Multiple full sentences forming a compelling commercial. Conversational delivery. No em dashes. No filler. Every word earns its place.\n- "search_terms": array of exactly 8 distinct visual search terms for stock footage that match the brand visually (e.g. ["modern office", "team collaboration", "city skyline", "technology", "people working", "sunrise", "product closeup", "happy customer"])\n- "unsplashQuery": 2-3 keywords for a fallback stock photo`;
 
     const prompt = `You are an expert social media strategist writing platform-native content for a real business.
 
@@ -989,6 +1018,37 @@ Topics or themes to emphasize.`}
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="field">
+                <div className="label">
+                  Voice
+                  <span className="label-hint">Azure voices are free</span>
+                </div>
+                <select
+                  className="voice-select"
+                  value={`${voiceModel}|${voiceName}`}
+                  onChange={e => {
+                    const [m, v] = e.target.value.split("|");
+                    setVoiceModel(m);
+                    setVoiceName(v);
+                  }}
+                >
+                  <optgroup label="Free (Azure)">
+                    {VOICES.filter(v => v.model === "azure").map(v => (
+                      <option key={v.voice} value={`${v.model}|${v.voice}`}>
+                        {v.label} -- {v.desc}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Premium (ElevenLabs)">
+                    {VOICES.filter(v => v.model !== "azure").map(v => (
+                      <option key={v.voice} value={`${v.model}|${v.voice}`}>
+                        {v.label} -- {v.desc}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
               </div>
 
               <button

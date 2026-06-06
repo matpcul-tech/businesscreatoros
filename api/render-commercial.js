@@ -1,9 +1,16 @@
 // api/render-commercial.js
-// Server-side proxy that builds a JSON2Video movie payload and submits it.
-// Returns a project id. The frontend then polls /api/render-status with that id.
+// Builds a JSON2Video movie and submits it. Returns a project id.
+// The video length follows the narration so the full script is always heard.
+// Adds Ken Burns motion, scene transitions, karaoke captions, optional music.
 // The JSON2Video key stays on the server.
 
 const J2V_ENDPOINT = "https://api.json2video.com/v2/movies";
+
+// Rough speaking rate in words per second, used to size the visuals.
+const WORDS_PER_SECOND = 2.5;
+
+// Confirmed transition styles. Cycle them for variety.
+const TRANSITIONS = ["fade", "circleopen", "wipeup"];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -19,7 +26,13 @@ export default async function handler(req, res) {
   const script = (body.script || "").trim();
   const clips = Array.isArray(body.clips) ? body.clips.filter(Boolean) : [];
   const orientation = body.orientation === "portrait" ? "portrait" : "landscape";
-  const sceneDuration = Number(body.sceneDuration) || 8;
+
+  // Voice selection. Azure voices are free. ElevenLabs voices cost credits.
+  const voiceModel = body.voiceModel || "azure";
+  const voiceName = body.voiceName || "en-US-AriaNeural";
+
+  // Optional background music. A direct mp3 URL plays low under the voice.
+  const musicUrl = body.musicUrl || null;
 
   if (!script) {
     return res.status(400).json({ error: "Provide a script string." });
@@ -28,35 +41,76 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Provide at least one clip URL." });
   }
 
-  const totalDuration = clips.length * sceneDuration;
+  // Estimate narration length, then size the visuals to match so the whole
+  // script is heard and the video never feels cut off.
+  const wordCount = script.split(/\s+/).filter(Boolean).length;
+  const speechSeconds = Math.max(8, Math.ceil(wordCount / WORDS_PER_SECOND));
 
-  const scenes = clips.map(function (clipUrl) {
-    return {
+  // About 4 seconds of screen time per clip keeps the pacing energetic.
+  const perClip = 4;
+  const sceneCount = Math.max(clips.length, Math.ceil(speechSeconds / perClip));
+
+  // Build scenes by cycling through the clips so the visuals fill the whole
+  // narration even when there are more scenes than unique clips.
+  const scenes = [];
+  for (let i = 0; i < sceneCount; i++) {
+    const clipUrl = clips[i % clips.length];
+    const zoom = i % 2 === 0 ? 2 : -2; // alternate gentle zoom in and out
+
+    const scene = {
       elements: [
         {
           type: "video",
           src: clipUrl,
-          duration: sceneDuration,
-          volume: 0,
+          duration: perClip,
+          resize: "cover",
+          zoom: zoom,
+          volume: 0, // mute the stock clip so only the voiceover is heard
         },
       ],
     };
-  });
 
-  const movie = {
-    quality: "high",
-    scenes: scenes,
-    elements: [
-      {
-        type: "voice",
-        text: script,
-        model: "azure",
-        voice: "en-US-JennyNeural",
-        duration: totalDuration,
-        start: 0,
+    if (i > 0) {
+      scene.transition = {
+        style: TRANSITIONS[i % TRANSITIONS.length],
+        duration: 0.6,
+      };
+    }
+
+    scenes.push(scene);
+  }
+
+  // Movie level elements overlay every scene.
+  const elements = [
+    {
+      type: "voice",
+      text: script,
+      model: voiceModel,
+      voice: voiceName,
+      "extra-time": 1.5, // small pad so the last word is not clipped
+    },
+    {
+      type: "subtitles",
+      language: "auto",
+      settings: {
+        style: "classic",
+        "font-family": "Oswald",
+        "font-weight": "700",
+        "font-size": orientation === "portrait" ? 72 : 56,
+        "max-words-per-line": 4,
+        "all-caps": true,
+        "word-color": "#FFD166",
+        "outline-color": "#000000",
+        "outline-width": 6,
       },
-    ],
-  };
+    },
+  ];
+
+  if (musicUrl) {
+    elements.push({ type: "audio", src: musicUrl, volume: 0.12 });
+  }
+
+  const movie = { quality: "high", scenes: scenes, elements: elements };
 
   if (orientation === "portrait") {
     movie.width = 1080;
@@ -65,35 +119,28 @@ export default async function handler(req, res) {
     movie.resolution = "full-hd";
   }
 
-  console.log("Submitting to JSON2Video:", JSON.stringify(movie));
-
   try {
     const r = await fetch(J2V_ENDPOINT, {
       method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify(movie),
     });
 
     const data = await r.json();
-    console.log("JSON2Video submit response:", JSON.stringify(data));
 
     if (!r.ok || data.success === false) {
       return res.status(502).json({
         error: "JSON2Video rejected the render.",
-        detail: data && (data.message || data.error || JSON.stringify(data)),
+        detail: data && (data.message || data.error || data),
       });
     }
 
     return res.status(200).json({
       project: data.project,
       sceneCount: scenes.length,
-      estimatedSeconds: scenes.length * sceneDuration,
+      estimatedSeconds: speechSeconds,
     });
   } catch (err) {
-    console.error("JSON2Video fetch failed:", err);
     return res.status(500).json({ error: "JSON2Video request failed.", detail: String(err) });
   }
 }

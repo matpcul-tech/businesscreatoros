@@ -13,7 +13,6 @@ function pickBestFile(videoFiles, maxWidth) {
   });
   if (mp4s.length === 0) return null;
 
-  // Sort by width ascending, then choose the largest file at or under maxWidth.
   mp4s.sort(function (a, b) {
     return (a.width || 0) - (b.width || 0);
   });
@@ -21,7 +20,6 @@ function pickBestFile(videoFiles, maxWidth) {
   for (const f of mp4s) {
     if ((f.width || 0) <= maxWidth) chosen = f;
   }
-  // If every file is larger than maxWidth, fall back to the smallest one.
   return chosen || mp4s[0];
 }
 
@@ -55,19 +53,12 @@ export default async function handler(req, res) {
         "&size=medium" +
         "&per_page=5";
 
-      const r = await fetch(url, {
-        headers: { Authorization: apiKey },
-      });
-
-      if (!r.ok) {
-        // Skip this term but keep going so one bad term does not kill the batch.
-        continue;
-      }
+      const r = await fetch(url, { headers: { Authorization: apiKey } });
+      if (!r.ok) continue;
 
       const data = await r.json();
       const videos = (data && data.videos) || [];
 
-      // Walk results until we find a clip with a usable mp4 file.
       let added = false;
       for (const v of videos) {
         const file = pickBestFile(v.video_files, maxWidth);
@@ -84,11 +75,7 @@ export default async function handler(req, res) {
           break;
         }
       }
-
-      // If nothing matched, push a null marker so the caller can see the gap.
-      if (!added) {
-        clips.push({ term: term, url: null });
-      }
+      if (!added) clips.push({ term: term, url: null });
     }
 
     const usable = clips.filter(function (c) {
